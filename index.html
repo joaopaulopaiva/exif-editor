@@ -815,9 +815,42 @@
             }
 
             selectedImages.forEach(img => {
+                let filename = img.name;
+                
+                // Try to get the EXIF date to generate filename
+                try {
+                    const exifObj = piexif.load(img.data);
+                    let dateTimeStr = null;
+                    
+                    // Try to get date from EXIF
+                    if (exifObj['Exif'] && exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal]) {
+                        dateTimeStr = exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal];
+                    } else if (exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.DateTime]) {
+                        dateTimeStr = exifObj['0th'][piexif.ImageIFD.DateTime];
+                    }
+                    
+                    if (dateTimeStr) {
+                        // Parse EXIF date format: "YYYY:MM:DD HH:MM:SS"
+                        const parts = dateTimeStr.split(' ');
+                        if (parts.length === 2) {
+                            const datePart = parts[0].replace(/:/g, '');
+                            const timePart = parts[1].replace(/:/g, '');
+                            
+                            // Get file extension
+                            const extension = img.name.split('.').pop().toLowerCase();
+                            
+                            // Generate filename: YYYYMMDD-HHMMSS.ext
+                            filename = `${datePart}-${timePart}.${extension}`;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error reading EXIF for filename:', error);
+                    // Keep original filename if error
+                }
+                
                 const link = document.createElement('a');
                 link.href = img.data;
-                link.download = img.name;
+                link.download = filename;
                 link.click();
             });
             
