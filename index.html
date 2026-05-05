@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -68,9 +69,40 @@
         .section-title::before {
             content: '';
             width: 4px;
+            min-width: 4px;
             height: 24px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 2px;
+        }
+
+        .section-title-row {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title-row .title-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title-row .title-left::before {
+            content: '';
+            width: 4px;
+            min-width: 4px;
+            height: 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+        }
+
+        .section-disabled {
+            opacity: 0.45;
+            pointer-events: none;
         }
 
         .upload-area {
@@ -109,6 +141,9 @@
             cursor: pointer;
             transition: all 0.3s ease;
             font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .btn:hover:not(:disabled) {
@@ -135,6 +170,14 @@
 
         .btn-danger:hover:not(:disabled) {
             box-shadow: 0 8px 20px rgba(220, 53, 69, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            box-shadow: 0 8px 20px rgba(40, 167, 69, 0.4);
         }
 
         .images-grid {
@@ -300,6 +343,12 @@
             border: 1px solid #f5c6cb;
         }
 
+        .status-message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
         #fileInput {
             display: none;
         }
@@ -378,6 +427,23 @@
             background: white;
             transform: scale(1.1);
         }
+
+        .progress-bar-wrap {
+            display: none;
+            background: #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 12px;
+            height: 10px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.2s ease;
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
@@ -412,20 +478,36 @@
 
             <!-- Location Section -->
             <div class="section" id="locationSection" style="display: none;">
-                <div class="section-title">2. Select Location</div>
-                <p style="color: #666; margin-bottom: 10px;">Click on the map to set GPS coordinates</p>
-                <div id="map"></div>
-                <div class="coordinates-display" id="coordinatesDisplay" style="margin-top: 15px; display: none;">
-                    No location selected
+                <div class="section-title-row">
+                    <span class="title-left">2. Set GPS Location</span>
+                    <label style="font-size:0.9em;font-weight:400;color:#555;display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="gpsEnabled" checked style="width:16px;height:16px;cursor:pointer;accent-color:#667eea;">
+                        Apply GPS to selected images
+                    </label>
+                </div>
+                <div id="gpsBody">
+                    <p style="color: #666; margin-bottom: 10px;">Click on the map to set GPS coordinates</p>
+                    <div id="map"></div>
+                    <div class="coordinates-display" id="coordinatesDisplay" style="margin-top: 15px; display: none;">
+                        No location selected
+                    </div>
                 </div>
             </div>
 
             <!-- Date Section -->
             <div class="section" id="dateSection" style="display: none;">
-                <div class="section-title">3. Select Date & Time</div>
-                <div class="input-group">
-                    <input type="date" id="dateInput">
-                    <input type="time" id="timeInput">
+                <div class="section-title-row">
+                    <span class="title-left">3. Set Date &amp; Time</span>
+                    <label style="font-size:0.9em;font-weight:400;color:#555;display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="datetimeEnabled" checked style="width:16px;height:16px;cursor:pointer;accent-color:#667eea;">
+                        Apply date/time to selected images
+                    </label>
+                </div>
+                <div id="datetimeBody">
+                    <div class="input-group">
+                        <input type="date" id="dateInput">
+                        <input type="time" id="timeInput" step="1">
+                    </div>
                 </div>
             </div>
 
@@ -433,8 +515,12 @@
             <div class="section" id="actionsSection" style="display: none;">
                 <div class="section-title">4. Apply & Download</div>
                 <div class="action-buttons">
-                    <button class="btn" id="applyBtn" disabled>Apply Changes</button>
-                    <button class="btn btn-secondary" id="downloadBtn" disabled>Download Selected Images</button>
+                    <button class="btn" id="applyBtn" disabled>✏️ Apply Changes</button>
+                    <button class="btn btn-secondary" id="downloadIndividualBtn" disabled>⬇️ Download Individually</button>
+                    <button class="btn btn-success" id="downloadZipBtn" disabled>🗜️ Download as ZIP</button>
+                </div>
+                <div class="progress-bar-wrap" id="progressWrap">
+                    <div class="progress-bar-fill" id="progressFill"></div>
                 </div>
                 <div id="statusMessage"></div>
             </div>
@@ -467,9 +553,14 @@
         const actionsSection = document.getElementById('actionsSection');
         const dateInput = document.getElementById('dateInput');
         const timeInput = document.getElementById('timeInput');
+        const gpsEnabled = document.getElementById('gpsEnabled');
+        const datetimeEnabled = document.getElementById('datetimeEnabled');
+        const gpsBody = document.getElementById('gpsBody');
+        const datetimeBody = document.getElementById('datetimeBody');
         const coordinatesDisplay = document.getElementById('coordinatesDisplay');
         const applyBtn = document.getElementById('applyBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
+        const downloadIndividualBtn = document.getElementById('downloadIndividualBtn');
+        const downloadZipBtn = document.getElementById('downloadZipBtn');
         const removeBtn = document.getElementById('removeBtn');
         const statusMessage = document.getElementById('statusMessage');
         const selectAllBtn = document.getElementById('selectAllBtn');
@@ -477,10 +568,24 @@
         const imageModal = document.getElementById('imageModal');
         const modalImage = document.getElementById('modalImage');
         const modalClose = document.getElementById('modalClose');
+        const progressWrap = document.getElementById('progressWrap');
+        const progressFill = document.getElementById('progressFill');
 
-        // Initialize date to today and time to 00:00
+        // Initialize date to today and time to 00:00:00
         dateInput.valueAsDate = new Date();
-        timeInput.value = '00:00';
+        timeInput.value = '00:00:00';
+
+        // Toggle GPS section body
+        gpsEnabled.addEventListener('change', () => {
+            gpsBody.classList.toggle('section-disabled', !gpsEnabled.checked);
+            updateButtons();
+        });
+
+        // Toggle datetime section body
+        datetimeEnabled.addEventListener('change', () => {
+            datetimeBody.classList.toggle('section-disabled', !datetimeEnabled.checked);
+            updateButtons();
+        });
 
         // Upload area click
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -554,13 +659,11 @@
             // Add click handlers for image selection
             document.querySelectorAll('.image-card').forEach(card => {
                 const imgElement = card.querySelector('img');
-                const removeBtn = card.querySelector('.image-remove');
+                const rmBtn = card.querySelector('.image-remove');
                 const viewBtn = card.querySelector('.image-view');
                 
-                // Single click to select
                 card.addEventListener('click', (e) => {
-                    // Don't select if clicking the remove or view button
-                    if (e.target === removeBtn || removeBtn.contains(e.target) ||
+                    if (e.target === rmBtn || rmBtn.contains(e.target) ||
                         e.target === viewBtn || viewBtn.contains(e.target)) {
                         return;
                     }
@@ -568,17 +671,14 @@
                     const id = parseFloat(card.getAttribute('data-id'));
                     const index = parseInt(card.getAttribute('data-index'));
                     
-                    // Shift+click for range selection
                     if (e.shiftKey && lastSelectedIndex !== -1) {
                         const start = Math.min(lastSelectedIndex, index);
                         const end = Math.max(lastSelectedIndex, index);
-                        
                         for (let i = start; i <= end; i++) {
                             images[i].selected = true;
                         }
                         renderImages();
                     } else {
-                        // Regular click to toggle selection
                         const img = images.find(i => i.id === id);
                         if (img) {
                             img.selected = !img.selected;
@@ -589,20 +689,16 @@
                     updateButtons();
                 });
                 
-                // View button handler
                 viewBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const id = parseFloat(viewBtn.getAttribute('data-id'));
                     const img = images.find(i => i.id === id);
-                    if (img) {
-                        openModal(img.data);
-                    }
+                    if (img) openModal(img.data);
                 });
                 
-                // Remove button handler
-                removeBtn.addEventListener('click', (e) => {
+                rmBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const id = parseFloat(removeBtn.getAttribute('data-id'));
+                    const id = parseFloat(rmBtn.getAttribute('data-id'));
                     removeImage(id);
                 });
             });
@@ -616,11 +712,7 @@
                 locationSection.style.display = 'block';
                 dateSection.style.display = 'block';
                 actionsSection.style.display = 'block';
-                
-                // Initialize map if not already done
-                if (!map) {
-                    setTimeout(initMap, 100);
-                }
+                if (!map) setTimeout(initMap, 100);
             }
         }
 
@@ -639,7 +731,6 @@
                 showStatus('No images selected to remove', 'error');
                 return;
             }
-            
             images = images.filter(img => !img.selected);
             lastSelectedIndex = -1;
             renderImages();
@@ -647,14 +738,12 @@
             showStatus(`Removed ${selectedCount} image(s)`, 'success');
         });
 
-        // Select all images
         selectAllBtn.addEventListener('click', () => {
             images.forEach(img => img.selected = true);
             renderImages();
             updateButtons();
         });
 
-        // Deselect all images
         deselectAllBtn.addEventListener('click', () => {
             images.forEach(img => img.selected = false);
             lastSelectedIndex = -1;
@@ -662,7 +751,7 @@
             updateButtons();
         });
 
-        // Modal functions
+        // Modal
         function openModal(imageSrc) {
             modalImage.src = imageSrc;
             imageModal.classList.add('active');
@@ -675,38 +764,26 @@
 
         modalClose.addEventListener('click', closeModal);
         imageModal.addEventListener('click', (e) => {
-            if (e.target === imageModal) {
-                closeModal();
-            }
+            if (e.target === imageModal) closeModal();
         });
-
-        // Close modal with Escape key
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && imageModal.classList.contains('active')) {
-                closeModal();
-            }
+            if (e.key === 'Escape' && imageModal.classList.contains('active')) closeModal();
         });
 
         // Initialize map
         function initMap() {
-            // Try to get user's location
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        map = L.map('map').setView([lat, lng], 13);
+                        map = L.map('map').setView([position.coords.latitude, position.coords.longitude], 13);
                         addMapLayers();
                     },
-                    (error) => {
-                        // Fallback to default location if geolocation fails
-                        console.log('Geolocation error:', error);
+                    () => {
                         map = L.map('map').setView([40.7128, -74.0060], 10);
                         addMapLayers();
                     }
                 );
             } else {
-                // Fallback if geolocation is not supported
                 map = L.map('map').setView([40.7128, -74.0060], 10);
                 addMapLayers();
             }
@@ -719,16 +796,10 @@
 
             map.on('click', (e) => {
                 selectedLocation = e.latlng;
-                
-                if (marker) {
-                    map.removeLayer(marker);
-                }
-                
+                if (marker) map.removeLayer(marker);
                 marker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
-                
                 coordinatesDisplay.style.display = 'block';
                 coordinatesDisplay.textContent = `Latitude: ${e.latlng.lat.toFixed(6)}, Longitude: ${e.latlng.lng.toFixed(6)}`;
-                
                 updateButtons();
             });
         }
@@ -736,59 +807,53 @@
         // Update button states
         function updateButtons() {
             const hasSelectedImages = images.some(img => img.selected);
-            const hasLocation = selectedLocation !== null;
-            const hasDate = dateInput.value !== '';
+            const willApplyGps = gpsEnabled.checked && selectedLocation !== null;
+            const willApplyDatetime = datetimeEnabled.checked && dateInput.value !== '';
             
-            applyBtn.disabled = !hasSelectedImages || (!hasLocation && !hasDate);
-            downloadBtn.disabled = !hasSelectedImages;
+            applyBtn.disabled = !hasSelectedImages || (!willApplyGps && !willApplyDatetime);
+            downloadIndividualBtn.disabled = !hasSelectedImages;
+            downloadZipBtn.disabled = !hasSelectedImages;
             removeBtn.disabled = !hasSelectedImages;
         }
 
-        // Apply changes
+        // Apply EXIF changes
         applyBtn.addEventListener('click', () => {
             const selectedImages = images.filter(img => img.selected);
-            
             if (selectedImages.length === 0) {
                 showStatus('Please select at least one image', 'error');
                 return;
             }
 
+            const applyGps = gpsEnabled.checked && selectedLocation !== null;
+            const applyDatetime = datetimeEnabled.checked && dateInput.value !== '';
+
             selectedImages.forEach(img => {
                 try {
                     const exifObj = piexif.load(img.data);
                     
-                    // Update GPS data if location is selected
-                    if (selectedLocation) {
+                    if (applyGps) {
                         const lat = selectedLocation.lat;
                         const lng = selectedLocation.lng;
-                        
-                        const latDeg = Math.abs(lat);
-                        const latMin = (latDeg % 1) * 60;
-                        const latSec = (latMin % 1) * 60;
-                        
-                        const lngDeg = Math.abs(lng);
-                        const lngMin = (lngDeg % 1) * 60;
-                        const lngSec = (lngMin % 1) * 60;
+                        const latDeg = Math.abs(lat), latMin = (latDeg % 1) * 60, latSec = (latMin % 1) * 60;
+                        const lngDeg = Math.abs(lng), lngMin = (lngDeg % 1) * 60, lngSec = (lngMin % 1) * 60;
                         
                         exifObj['GPS'] = {
-                            [piexif.GPSIFD.GPSLatitude]: [
-                                [Math.floor(latDeg), 1],
-                                [Math.floor(latMin), 1],
-                                [Math.round(latSec * 100), 100]
-                            ],
+                            [piexif.GPSIFD.GPSLatitude]: [[Math.floor(latDeg), 1], [Math.floor(latMin), 1], [Math.round(latSec * 100), 100]],
                             [piexif.GPSIFD.GPSLatitudeRef]: lat >= 0 ? 'N' : 'S',
-                            [piexif.GPSIFD.GPSLongitude]: [
-                                [Math.floor(lngDeg), 1],
-                                [Math.floor(lngMin), 1],
-                                [Math.round(lngSec * 100), 100]
-                            ],
+                            [piexif.GPSIFD.GPSLongitude]: [[Math.floor(lngDeg), 1], [Math.floor(lngMin), 1], [Math.round(lngSec * 100), 100]],
                             [piexif.GPSIFD.GPSLongitudeRef]: lng >= 0 ? 'E' : 'W'
                         };
                     }
                     
-                    // Update date if selected
-                    if (dateInput.value) {
-                        const dateStr = `${dateInput.value.replace(/-/g, ':')} ${timeInput.value || '00:00'}:00`;
+                    if (applyDatetime) {
+                        // timeInput with step=1 returns HH:MM:SS; fall back to HH:MM:00
+                        const timeParts = (timeInput.value || '00:00:00').split(':');
+                        const hh = (timeParts[0] || '00').padStart(2, '0');
+                        const mm = (timeParts[1] || '00').padStart(2, '0');
+                        const ss = (timeParts[2] || '00').padStart(2, '0');
+                        const dateStr = `${dateInput.value.replace(/-/g, ':')} ${hh}:${mm}:${ss}`;
+                        if (!exifObj['Exif']) exifObj['Exif'] = {};
+                        if (!exifObj['0th']) exifObj['0th'] = {};
                         exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal] = dateStr;
                         exifObj['0th'][piexif.ImageIFD.DateTime] = dateStr;
                     }
@@ -800,74 +865,147 @@
                     console.error('Error updating EXIF:', error);
                 }
             });
+
+            const parts = [];
+            if (applyGps) parts.push('GPS');
+            if (applyDatetime) parts.push('date/time');
             
             renderImages();
-            showStatus(`Successfully updated ${selectedImages.length} image(s)`, 'success');
+            showStatus(`✅ Updated ${parts.join(' & ')} for ${selectedImages.length} image(s)`, 'success');
         });
 
-        // Download selected images
-        downloadBtn.addEventListener('click', () => {
+        // Helper: get filename for an image based on its EXIF date
+        function getFilename(img) {
+            try {
+                const exifObj = piexif.load(img.data);
+                let dateTimeStr = null;
+                if (exifObj['Exif'] && exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal]) {
+                    dateTimeStr = exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal];
+                } else if (exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.DateTime]) {
+                    dateTimeStr = exifObj['0th'][piexif.ImageIFD.DateTime];
+                }
+                if (dateTimeStr) {
+                    const parts = dateTimeStr.split(' ');
+                    if (parts.length === 2) {
+                        const datePart = parts[0].replace(/:/g, '');
+                        const timePart = parts[1].replace(/:/g, '');
+                        const extension = img.name.split('.').pop().toLowerCase();
+                        return `${datePart}-${timePart}.${extension}`;
+                    }
+                }
+            } catch (e) {}
+            return img.name;
+        }
+
+        // Helper: dataURL → Uint8Array
+        function dataURLToUint8Array(dataURL) {
+            const base64 = dataURL.split(',')[1];
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        // Download individually
+        downloadIndividualBtn.addEventListener('click', () => {
             const selectedImages = images.filter(img => img.selected);
-            
+            if (selectedImages.length === 0) {
+                showStatus('Please select at least one image', 'error');
+                return;
+            }
+            selectedImages.forEach(img => {
+                const link = document.createElement('a');
+                link.href = img.data;
+                link.download = getFilename(img);
+                link.click();
+            });
+            showStatus(`⬇️ Downloaded ${selectedImages.length} image(s)`, 'success');
+        });
+
+        // Download as ZIP
+        downloadZipBtn.addEventListener('click', async () => {
+            const selectedImages = images.filter(img => img.selected);
             if (selectedImages.length === 0) {
                 showStatus('Please select at least one image', 'error');
                 return;
             }
 
-            selectedImages.forEach(img => {
-                let filename = img.name;
-                
-                // Try to get the EXIF date to generate filename
-                try {
-                    const exifObj = piexif.load(img.data);
-                    let dateTimeStr = null;
-                    
-                    // Try to get date from EXIF
-                    if (exifObj['Exif'] && exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal]) {
-                        dateTimeStr = exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal];
-                    } else if (exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.DateTime]) {
-                        dateTimeStr = exifObj['0th'][piexif.ImageIFD.DateTime];
+            downloadZipBtn.disabled = true;
+            downloadZipBtn.textContent = '⏳ Building ZIP...';
+            progressWrap.style.display = 'block';
+            progressFill.style.width = '0%';
+            showStatus('🗜️ Preparing ZIP file...', 'info');
+
+            try {
+                const zip = new JSZip();
+                const usedNames = {};
+
+                for (let i = 0; i < selectedImages.length; i++) {
+                    const img = selectedImages[i];
+                    let filename = getFilename(img);
+
+                    // Handle duplicate filenames
+                    if (usedNames[filename]) {
+                        usedNames[filename]++;
+                        const ext = filename.split('.').pop();
+                        const base = filename.slice(0, filename.length - ext.length - 1);
+                        filename = `${base}_${usedNames[filename]}.${ext}`;
+                    } else {
+                        usedNames[filename] = 1;
                     }
-                    
-                    if (dateTimeStr) {
-                        // Parse EXIF date format: "YYYY:MM:DD HH:MM:SS"
-                        const parts = dateTimeStr.split(' ');
-                        if (parts.length === 2) {
-                            const datePart = parts[0].replace(/:/g, '');
-                            const timePart = parts[1].replace(/:/g, '');
-                            
-                            // Get file extension
-                            const extension = img.name.split('.').pop().toLowerCase();
-                            
-                            // Generate filename: YYYYMMDD-HHMMSS.ext
-                            filename = `${datePart}-${timePart}.${extension}`;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error reading EXIF for filename:', error);
-                    // Keep original filename if error
+
+                    zip.file(filename, dataURLToUint8Array(img.data));
+
+                    const pct = Math.round(((i + 1) / selectedImages.length) * 80);
+                    progressFill.style.width = pct + '%';
                 }
-                
+
+                showStatus('🗜️ Compressing...', 'info');
+
+                const blob = await zip.generateAsync(
+                    { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+                    (meta) => {
+                        progressFill.style.width = (80 + Math.round(meta.percent * 0.2)) + '%';
+                    }
+                );
+
+                progressFill.style.width = '100%';
+
+                const zipName = `exif-images-${new Date().toISOString().slice(0, 10)}.zip`;
+                const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                link.href = img.data;
-                link.download = filename;
+                link.href = url;
+                link.download = zipName;
                 link.click();
-            });
-            
-            showStatus(`Downloaded ${selectedImages.length} image(s)`, 'success');
+                URL.revokeObjectURL(url);
+
+                showStatus(`✅ Downloaded ${selectedImages.length} image(s) as ${zipName}`, 'success');
+            } catch (err) {
+                console.error('ZIP error:', err);
+                showStatus('❌ Failed to create ZIP file. Please try again.', 'error');
+            } finally {
+                downloadZipBtn.disabled = false;
+                downloadZipBtn.innerHTML = '🗜️ Download as ZIP';
+                updateButtons();
+                setTimeout(() => {
+                    progressWrap.style.display = 'none';
+                    progressFill.style.width = '0%';
+                }, 2000);
+            }
         });
 
         // Show status message
         function showStatus(message, type) {
             statusMessage.innerHTML = `<div class="status-message ${type}">${message}</div>`;
-            setTimeout(() => {
-                statusMessage.innerHTML = '';
-            }, 5000);
+            setTimeout(() => { statusMessage.innerHTML = ''; }, 6000);
         }
 
-        // Listen to date/time changes
         dateInput.addEventListener('change', updateButtons);
         timeInput.addEventListener('change', updateButtons);
+        datetimeEnabled.addEventListener('change', updateButtons);
+        gpsEnabled.addEventListener('change', updateButtons);
     </script>
 </body>
 </html>
